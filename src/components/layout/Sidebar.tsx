@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -15,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  X,
   QrCode,
   UserPlus,
 } from 'lucide-react';
@@ -35,11 +35,6 @@ const navItems = [
   { name: 'HR', path: '/hr', icon: UserCog, disabled: true },
 ];
 
-const bottomNavItems = [
-  { name: 'Settings', path: '/settings', icon: Settings, disabled: true },
-  { name: 'Logout', path: '/logout', icon: LogOut, disabled: true },
-];
-
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
@@ -47,6 +42,13 @@ interface SidebarProps {
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  };
 
   const NavItem = ({ item, showLabel = true }: { item: typeof navItems[0]; showLabel?: boolean }) => {
     const isActive = location.pathname === item.path;
@@ -109,9 +111,25 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 
       {/* Bottom Navigation */}
       <div className="p-3 space-y-1 border-t border-sidebar-border">
-        {bottomNavItems.map((item) => (
-          <NavItem key={item.path} item={item} showLabel={!collapsed} />
-        ))}
+        <div
+          className={cn(
+            'sidebar-item opacity-50 cursor-not-allowed',
+            !collapsed ? '' : 'justify-center px-2'
+          )}
+        >
+          <Settings className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && <span className="truncate">Settings</span>}
+        </div>
+        <button
+          onClick={handleLogout}
+          className={cn(
+            'sidebar-item w-full text-left hover:bg-destructive/20 hover:text-destructive',
+            collapsed && 'justify-center px-2'
+          )}
+        >
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && <span className="truncate">Logout</span>}
+        </button>
       </div>
 
       {/* Collapse Button */}
@@ -128,6 +146,14 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 export const MobileSidebar = () => {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    setOpen(false);
+    navigate('/auth');
+  };
 
   const NavItem = ({ item }: { item: typeof navItems[0] }) => {
     const isActive = location.pathname === item.path;
@@ -182,9 +208,17 @@ export const MobileSidebar = () => {
 
         {/* Bottom Navigation */}
         <div className="p-3 space-y-1 border-t border-sidebar-border">
-          {bottomNavItems.map((item) => (
-            <NavItem key={item.path} item={item} />
-          ))}
+          <div className="sidebar-item opacity-50 cursor-not-allowed">
+            <Settings className="h-5 w-5 flex-shrink-0" />
+            <span className="truncate">Settings</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="sidebar-item w-full text-left hover:bg-destructive/20 hover:text-destructive"
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            <span className="truncate">Logout</span>
+          </button>
         </div>
       </SheetContent>
     </Sheet>

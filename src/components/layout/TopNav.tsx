@@ -1,7 +1,8 @@
-import { useLocation } from 'react-router-dom';
-import { Bell, Search, ChevronRight, User } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Search, ChevronRight, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,10 @@ const routeNames: Record<string, string> = {
   '/': 'Dashboard',
   '/membership': 'Membership',
   '/all-diet-plan': 'All Diet Plans',
+  '/diet': 'Diet Management',
   '/all-workout': 'All Workout',
+  '/admin/qr': 'QR Registration',
+  '/admin/customers': 'New Customers',
   '/attendance': 'Attendance',
   '/finance': 'Finance',
   '/hr': 'HR',
@@ -27,7 +31,18 @@ const routeNames: Record<string, string> = {
 
 export const TopNav = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const currentRoute = routeNames[location.pathname] || 'Page';
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  const getInitials = (email: string) => {
+    return email.substring(0, 2).toUpperCase();
+  };
 
   return (
     <header className="sticky top-0 z-40 h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 gap-4">
@@ -87,27 +102,27 @@ export const TopNav = () => {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="gap-2 px-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop" />
-                <AvatarFallback>AD</AvatarFallback>
+                <AvatarImage src="" />
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {user?.email ? getInitials(user.email) : 'AD'}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium">Admin</span>
-                <span className="text-xs text-muted-foreground">Main Branch</span>
+                <span className="text-sm font-medium">{user?.user_metadata?.name || 'Admin'}</span>
+                <span className="text-xs text-muted-foreground">{user?.email || 'admin@gym.com'}</span>
               </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
+            <DropdownMenuItem disabled>Profile</DropdownMenuItem>
+            <DropdownMenuItem disabled>Billing</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Switch Branch</DropdownMenuLabel>
-            <DropdownMenuItem>Main Branch</DropdownMenuItem>
-            <DropdownMenuItem>Downtown Branch</DropdownMenuItem>
-            <DropdownMenuItem>West Side Branch</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Logout</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
