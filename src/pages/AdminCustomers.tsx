@@ -12,7 +12,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getAllCustomers, exportCustomersAsCSV } from '@/utils/customerStorage';
+import { getAllCustomers, exportCustomersAsCSV, subscribeToCustomers } from '@/utils/customerStorage';
 import { Customer, MEMBERSHIP_TYPES } from '@/types/customer';
 import { Search, Download, RefreshCw, Users, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
@@ -24,10 +24,10 @@ const AdminCustomers = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
-    const loadCustomers = () => {
+    const loadCustomers = async () => {
         setIsLoading(true);
         try {
-            const data = getAllCustomers();
+            const data = await getAllCustomers();
             setCustomers(data);
         } catch (error) {
             toast.error('Failed to load customers');
@@ -39,6 +39,15 @@ const AdminCustomers = () => {
 
     useEffect(() => {
         loadCustomers();
+
+        // Subscribe to real-time updates
+        const unsubscribe = subscribeToCustomers((updatedCustomers) => {
+            setCustomers(updatedCustomers);
+        });
+
+        return () => {
+            unsubscribe();
+        };
     }, []);
 
     const filteredCustomers = useMemo(() => {
@@ -56,7 +65,7 @@ const AdminCustomers = () => {
 
     const handleExportCSV = () => {
         try {
-            const csv = exportCustomersAsCSV();
+            const csv = exportCustomersAsCSV(customers);
             if (!csv) {
                 toast.error('No customers to export');
                 return;

@@ -1,5 +1,6 @@
 // Customer types for QR-based intake system
 export interface Customer {
+    id: string;
     customerId: string;
     fullName: string;
     phone: string;

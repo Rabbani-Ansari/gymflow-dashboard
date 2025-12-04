@@ -55,10 +55,7 @@ const NewCustomer = () => {
     const onSubmit = async (data: CustomerFormData) => {
         setIsSubmitting(true);
         try {
-            // Simulate slight delay for UX
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const customer = saveCustomer(data);
+            const customer = await saveCustomer(data);
             setSubmittedCustomerId(customer.customerId);
             toast.success('Registration successful!');
         } catch (error) {
