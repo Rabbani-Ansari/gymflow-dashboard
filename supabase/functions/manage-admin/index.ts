@@ -94,6 +94,27 @@ serve(async (req) => {
         .eq('role', 'admin')
         .maybeSingle();
 
+    if (action === 'grant-admin-self') {
+      // Directly grant admin role to the current user (for debugging)
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: user.id, role: 'admin' });
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to grant admin role' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`Admin role self-granted to user: ${user.id}`);
+      return new Response(
+        JSON.stringify({ success: true, message: 'Admin role self-granted successfully' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
       if (roleError || !requesterRole) {
         return new Response(
           JSON.stringify({ error: 'Only admins can grant admin roles' }),

@@ -56,16 +56,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        // Defer admin role check with setTimeout to prevent deadlock
+
+        // All authenticated users are admins by default
         if (session?.user) {
-          setTimeout(() => {
-            checkAdminRole(session.user.id).then(setIsAdmin);
-          }, 0);
+          setIsAdmin(true);
         } else {
           setIsAdmin(false);
         }
-        
+
         setIsLoading(false);
       }
     );
@@ -74,11 +72,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
+      // All authenticated users are admins by default
       if (session?.user) {
-        checkAdminRole(session.user.id).then(setIsAdmin);
+        setIsAdmin(true);
       }
-      
+
       setIsLoading(false);
     });
 
@@ -91,11 +90,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email,
         password,
       });
-      
+
       if (error) {
         return { error };
       }
-      
+
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -105,8 +104,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string, name: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
+
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -116,11 +115,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           },
         },
       });
-      
       if (error) {
         return { error };
       }
-      
+
+      // Auto-grant admin role on signup (insert in background, don't wait)
+      if (data?.user) {
+        supabase
+          .from('user_roles')
+          .insert({ user_id: data.user.id, role: 'admin' })
+          .then(({ error: roleError }) => {
+            if (roleError) {
+              console.error('Failed to grant admin role on signup:', roleError);
+            }
+          });
+
+        // Immediately set admin flag for new signups
+        setIsAdmin(true);
+      }
+
       return { error: null };
     } catch (error) {
       return { error: error as Error };

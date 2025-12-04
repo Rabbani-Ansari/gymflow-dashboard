@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -10,6 +10,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
   const { user, isAdmin, isLoading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (isLoading) {
     return (
@@ -35,10 +36,10 @@ export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRout
             You don't have permission to access this page. Please contact an administrator if you believe this is an error.
           </p>
           <button
-            onClick={() => window.history.back()}
+            onClick={() => navigate('/auth')}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
-            Go Back
+            Go to Login
           </button>
         </div>
       </div>
