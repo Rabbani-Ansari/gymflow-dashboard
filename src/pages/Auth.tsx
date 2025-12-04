@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Dumbbell, Mail, Lock, User } from 'lucide-react';
+import { Loader2, Dumbbell, Mail, Lock, User, Shield } from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -35,14 +36,75 @@ const Auth = () => {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [adminExists, setAdminExists] = useState<boolean | null>(null);
+  const [isClaimingAdmin, setIsClaimingAdmin] = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
+  // Check if admin exists when user is logged in
+  useEffect(() => {
+    const checkAdminExists = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase.functions.invoke('manage-admin', {
+            body: { action: 'check-admin-exists' }
+          });
+          if (!error && data) {
+            setAdminExists(data.adminExists);
+          }
+        } catch (err) {
+          console.error('Error checking admin:', err);
+        }
+      }
+    };
+    checkAdminExists();
+  }, [user]);
+
+  const handleClaimAdmin = async () => {
+    setIsClaimingAdmin(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-admin', {
+        body: { action: 'grant-initial-admin' }
+      });
+      
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Failed to claim admin',
+          description: error.message,
+        });
+      } else if (data.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Failed to claim admin',
+          description: data.error,
+        });
+      } else {
+        toast({
+          title: 'Admin Access Granted!',
+          description: 'You are now an admin. Redirecting...',
+        });
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      }
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: err.message || 'Something went wrong',
+      });
+    }
+    setIsClaimingAdmin(false);
+  };
+
   useEffect(() => {
     if (user && !isLoading) {
+      // Don't redirect if we're showing the claim admin option
+      if (adminExists === false) return;
       navigate(from, { replace: true });
     }
-  }, [user, isLoading, navigate, from]);
+  }, [user, isLoading, navigate, from, adminExists]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +191,55 @@ const Auth = () => {
   };
 
   if (isLoading) {
+  // Show claim admin UI if user is logged in but no admin exists
+  if (user && adminExists === false) {
     return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+              <Shield className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">Become Admin</h1>
+            <p className="text-muted-foreground mt-2">No admin exists yet. You can become the first admin.</p>
+          </div>
+
+          <Card className="border-border/50 shadow-xl">
+            <CardHeader>
+              <CardTitle>Claim Admin Access</CardTitle>
+              <CardDescription>
+                As the first user, you can claim admin access to manage the gym.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Logged in as: <strong>{user.email}</strong>
+              </p>
+              <Button 
+                onClick={handleClaimAdmin} 
+                className="w-full" 
+                disabled={isClaimingAdmin}
+              >
+                {isClaimingAdmin ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Claiming admin...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="mr-2 h-4 w-4" />
+                    Become Admin
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
