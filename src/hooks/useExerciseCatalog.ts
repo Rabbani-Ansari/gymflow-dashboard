@@ -2,8 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExerciseTemplate {
+    id: string;
     name: string;
     category: string;
+    body_part: string | null;
+    equipment: string | null;
+    difficulty: string | null;
+    description: string | null;
     animation_url: string | null;
 }
 
@@ -11,40 +16,54 @@ export const useExerciseCatalog = () => {
     return useQuery({
         queryKey: ['exercise-catalog'],
         queryFn: async () => {
-            // Get unique exercise names from all workouts
+            // Fetch from the dedicated exercise catalog table
             const { data, error } = await supabase
-                .from('workout_exercises')
-                .select('name, animation_url')
+                .from('exercise_catalog')
+                .select('*')
                 .order('name');
 
-            if (error) throw error;
+            if (error) {
+                console.error('Error fetching exercise catalog:', error);
+                // Fallback to fetching unique exercises from workout_exercises if catalog table doesn't exist
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('workout_exercises')
+                    .select('name, animation_url')
+                    .order('name');
 
-            // Group by name and get unique exercises
-            const uniqueExercises = new Map<string, ExerciseTemplate>();
+                if (fallbackError) throw fallbackError;
 
-            data.forEach((exercise) => {
-                if (!uniqueExercises.has(exercise.name)) {
-                    // Infer category from exercise name (can be enhanced later)
-                    let category = 'strength';
-                    const lowerName = exercise.name.toLowerCase();
+                // Deduplicate by name
+                const uniqueExercises = new Map<string, ExerciseTemplate>();
+                fallbackData.forEach((exercise) => {
+                    if (!uniqueExercises.has(exercise.name)) {
+                        let category = 'strength';
+                        const lowerName = exercise.name.toLowerCase();
 
-                    if (lowerName.includes('cardio') || lowerName.includes('running') || lowerName.includes('jump')) {
-                        category = 'cardio';
-                    } else if (lowerName.includes('stretch') || lowerName.includes('yoga')) {
-                        category = 'flexibility';
-                    } else if (lowerName.includes('core') || lowerName.includes('plank') || lowerName.includes('crunch')) {
-                        category = 'core';
+                        if (lowerName.includes('cardio') || lowerName.includes('running') || lowerName.includes('jump')) {
+                            category = 'cardio';
+                        } else if (lowerName.includes('stretch') || lowerName.includes('yoga')) {
+                            category = 'flexibility';
+                        } else if (lowerName.includes('core') || lowerName.includes('plank') || lowerName.includes('crunch')) {
+                            category = 'core';
+                        }
+
+                        uniqueExercises.set(exercise.name, {
+                            id: exercise.name, // Use name as ID for fallback
+                            name: exercise.name,
+                            category,
+                            body_part: null,
+                            equipment: null,
+                            difficulty: null,
+                            description: null,
+                            animation_url: exercise.animation_url,
+                        });
                     }
+                });
 
-                    uniqueExercises.set(exercise.name, {
-                        name: exercise.name,
-                        category,
-                        animation_url: exercise.animation_url,
-                    });
-                }
-            });
+                return Array.from(uniqueExercises.values());
+            }
 
-            return Array.from(uniqueExercises.values());
+            return data as ExerciseTemplate[];
         },
     });
 };

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { DietPlan, Member } from '@/types';
 import { AssignedMember } from '@/types/memberDiet';
-import { members as allMembers } from '@/data/mockData';
+import { useMembers } from '@/hooks/useMembers';
 import { CustomizeMemberDietDialog } from './CustomizeMemberDietDialog';
 
 interface AssignedMembersTabProps {
@@ -39,15 +39,16 @@ const statusColors = {
 };
 
 export const AssignedMembersTab = ({ plan, onPlanUpdate }: AssignedMembersTabProps) => {
+  const { data: allMembers = [] } = useMembers();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMember, setSelectedMember] = useState<AssignedMember | null>(null);
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
 
   // Get assigned members with their details
-  const assignedMembers: AssignedMember[] = plan.members.map((memberId) => {
+  const assignedMembers: AssignedMember[] = (plan.members || []).map((memberId) => {
     const member = allMembers.find((m) => m.id === memberId);
     if (!member) return null;
-    
+
     return {
       id: member.id,
       name: member.name,
@@ -57,7 +58,7 @@ export const AssignedMembersTab = ({ plan, onPlanUpdate }: AssignedMembersTabPro
       planStatus: 'active' as const,
       currentMacros: plan.macros,
       adherenceRate: Math.floor(Math.random() * 30) + 70, // Mock data
-      startDate: member.startDate,
+      startDate: member.start_date,
     };
   }).filter(Boolean) as AssignedMember[];
 

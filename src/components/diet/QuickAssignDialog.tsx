@@ -16,8 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { members, dietPlans } from '@/data/mockData';
-import { DietPlan, Member } from '@/types';
+import { useMembers, Member } from '@/hooks/useMembers';
+import { useDietPlans, DietPlan } from '@/hooks/useDietPlans';
 
 interface QuickAssignDialogProps {
   open: boolean;
@@ -32,11 +32,21 @@ export const QuickAssignDialog = ({
   onOpenChange,
   onAssign,
 }: QuickAssignDialogProps) => {
+  const { data: members = [] } = useMembers();
+  const { data: dbDietPlans = [] } = useDietPlans();
+
+  // Map to UI-friendly format
+  const dietPlans = dbDietPlans.map(p => ({
+    ...p,
+    trainer: p.trainer?.name || 'Unknown',
+    targetCalories: p.target_calories,
+  }));
+
   const [step, setStep] = useState<Step>('scan');
   const [memberSearch, setMemberSearch] = useState('');
   const [planSearch, setPlanSearch] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<DietPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [notifyWhatsApp, setNotifyWhatsApp] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
 
@@ -48,13 +58,13 @@ export const QuickAssignDialog = ({
         m.phone.includes(memberSearch) ||
         m.email.toLowerCase().includes(memberSearch.toLowerCase())
     ).slice(0, 5);
-  }, [memberSearch]);
+  }, [memberSearch, members]);
 
   const filteredPlans = useMemo(() => {
     return dietPlans.filter((p) =>
       p.name.toLowerCase().includes(planSearch.toLowerCase())
     );
-  }, [planSearch]);
+  }, [planSearch, dietPlans]);
 
   const handleScan = () => {
     setIsScanning(true);
@@ -82,8 +92,7 @@ export const QuickAssignDialog = ({
     if (selectedMember && selectedPlan) {
       onAssign(selectedMember.id, selectedPlan.id, notifyWhatsApp);
       toast.success(
-        `${selectedPlan.name} assigned to ${selectedMember.name}${
-          notifyWhatsApp ? ' (WhatsApp notification sent)' : ''
+        `${selectedPlan.name} assigned to ${selectedMember.name}${notifyWhatsApp ? ' (WhatsApp notification sent)' : ''
         }`
       );
       handleClose();
@@ -121,9 +130,8 @@ export const QuickAssignDialog = ({
             <>
               {/* QR Scanner Placeholder */}
               <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isScanning ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
-                }`}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isScanning ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+                  }`}
               >
                 <QrCode className={`h-16 w-16 mx-auto mb-4 text-muted-foreground ${isScanning ? 'animate-pulse' : ''}`} />
                 <p className="text-sm text-muted-foreground mb-4">

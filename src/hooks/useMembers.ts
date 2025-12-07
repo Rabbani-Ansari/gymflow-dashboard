@@ -14,6 +14,7 @@ export interface Member {
   status: 'active' | 'expired' | 'trial';
   payment_due: number;
   address: string | null;
+  gym_id: string | null; // Reference to gym_branding.id
   created_at: string;
   updated_at: string;
 }

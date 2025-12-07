@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { members as allMembers, trainers } from '@/data/mockData';
+import { useMembers } from '@/hooks/useMembers';
 import { DietPlan } from '@/types';
 
 interface BulkAssignMembersDialogProps {
@@ -50,6 +50,8 @@ export const BulkAssignMembersDialog = ({
   selectedPlans,
   onAssign,
 }: BulkAssignMembersDialogProps) => {
+  const { data: allMembers = [] } = useMembers();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
   const [trainerFilter, setTrainerFilter] = useState<string>('all');
@@ -71,7 +73,7 @@ export const BulkAssignMembersDialog = ({
       const matchesStatus = trainerFilter === 'all' || member.status === trainerFilter;
       return matchesSearch && matchesPlan && matchesStatus;
     });
-  }, [searchQuery, goalFilter, trainerFilter]);
+  }, [searchQuery, goalFilter, trainerFilter, allMembers]);
 
   const toggleMember = (memberId: string) => {
     setSelectedMembers((prev) =>
@@ -99,8 +101,7 @@ export const BulkAssignMembersDialog = ({
     );
 
     toast.success(
-      `${selectedPlans.length} plan(s) assigned to ${selectedMembers.length} member(s)${
-        notify ? ' with notifications' : ''
+      `${selectedPlans.length} plan(s) assigned to ${selectedMembers.length} member(s)${notify ? ' with notifications' : ''
       }`
     );
 
@@ -187,9 +188,8 @@ export const BulkAssignMembersDialog = ({
                 {filteredMembers.map((member) => (
                   <div
                     key={member.id}
-                    className={`flex items-center gap-3 p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors ${
-                      selectedMembers.includes(member.id) ? 'bg-primary/10' : ''
-                    }`}
+                    className={`flex items-center gap-3 p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors ${selectedMembers.includes(member.id) ? 'bg-primary/10' : ''
+                      }`}
                     onClick={() => toggleMember(member.id)}
                   >
                     <Checkbox checked={selectedMembers.includes(member.id)} />

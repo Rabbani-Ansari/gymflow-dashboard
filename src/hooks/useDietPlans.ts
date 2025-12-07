@@ -65,7 +65,7 @@ export const useDietPlans = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as DietPlan[];
+      return data as unknown as DietPlan[];
     },
   });
 };
@@ -85,7 +85,7 @@ export const useDietPlan = (id: string) => {
         .single();
 
       if (error) throw error;
-      return data as DietPlan;
+      return data as unknown as DietPlan;
     },
     enabled: !!id,
   });
@@ -122,21 +122,60 @@ export const useUpdateDietPlan = () => {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<DietPlan> & { id: string }) => {
-      const { data, error } = await supabase
+      // 1. Separate meals from other updates
+      const { meals, ...planUpdates } = updates;
+
+      // 2. Update diet_plans table
+      const { data: planData, error: planError } = await supabase
         .from('diet_plans')
-        .update(updates)
+        .update(planUpdates)
         .eq('id', id)
         .select()
         .single();
 
-      if (error) throw error;
-      return data;
+      if (planError) throw planError;
+
+      // 3. If meals are provided, update diet_meals table
+      if (meals) {
+        // First delete existing meals for this plan
+        const { error: deleteError } = await supabase
+          .from('diet_meals')
+          .delete()
+          .eq('diet_plan_id', id);
+
+        if (deleteError) throw deleteError;
+
+        // Then insert new meals
+        // Transform the meals array to match the database schema
+        // The EditDietPlanDialog sends meals as { time: string, items: any[] }
+        // We need to map time -> meal_time and add diet_plan_id
+        const mealRows = meals.map((meal: any) => ({
+          diet_plan_id: id,
+          meal_time: (meal.time || meal.meal_time) as any, // Cast to any to avoid strict casing checks until types generated
+          items: meal.items || [],
+        })).filter(m => m.items.length > 0); // Only insert meals with items
+
+        if (mealRows.length > 0) {
+          console.log('Inserting meals:', mealRows);
+          const { error: insertError } = await supabase
+            .from('diet_meals')
+            .insert(mealRows);
+
+          if (insertError) {
+            console.error('Error inserting meals:', insertError);
+            throw insertError;
+          }
+        }
+      }
+
+      return planData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['diet-plans'] });
       toast({ title: 'Success', description: 'Diet plan updated successfully' });
     },
     onError: (error) => {
+      console.error('Error updating diet plan:', error);
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     },
   });

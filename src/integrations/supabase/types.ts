@@ -267,6 +267,96 @@ export type Database = {
           },
         ]
       }
+      exercise_catalog: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          body_part: string | null
+          equipment: string | null
+          difficulty: string | null
+          description: string | null
+          animation_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category?: string
+          body_part?: string | null
+          equipment?: string | null
+          difficulty?: string | null
+          description?: string | null
+          animation_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          body_part?: string | null
+          equipment?: string | null
+          difficulty?: string | null
+          description?: string | null
+          animation_url?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      workout_assignments: {
+        Row: {
+          id: string
+          member_id: string
+          workout_id: string
+          status: Database["public"]["Enums"]["assignment_status"]
+          start_date: string | null
+          end_date: string | null
+          active_days: string[] | null
+          notify: boolean | null
+          notes: string | null
+          assigned_at: string
+        }
+        Insert: {
+          id?: string
+          member_id: string
+          workout_id: string
+          status?: Database["public"]["Enums"]["assignment_status"]
+          start_date?: string | null
+          end_date?: string | null
+          active_days?: string[] | null
+          notify?: boolean | null
+          notes?: string | null
+          assigned_at?: string
+        }
+        Update: {
+          id?: string
+          member_id?: string
+          workout_id?: string
+          status?: Database["public"]["Enums"]["assignment_status"]
+          start_date?: string | null
+          end_date?: string | null
+          active_days?: string[] | null
+          notify?: boolean | null
+          notes?: string | null
+          assigned_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_assignments_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       member_attendance: {
         Row: {
           check_in_time: string
@@ -545,45 +635,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      workout_assignments: {
-        Row: {
-          assigned_at: string
-          id: string
-          member_id: string
-          status: Database["public"]["Enums"]["assignment_status"]
-          workout_id: string
-        }
-        Insert: {
-          assigned_at?: string
-          id?: string
-          member_id: string
-          status?: Database["public"]["Enums"]["assignment_status"]
-          workout_id: string
-        }
-        Update: {
-          assigned_at?: string
-          id?: string
-          member_id?: string
-          status?: Database["public"]["Enums"]["assignment_status"]
-          workout_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workout_assignments_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workout_assignments_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
-            referencedRelation: "workouts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       workout_exercises: {
         Row: {

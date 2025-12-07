@@ -63,7 +63,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 
@@ -76,6 +76,8 @@ import { WorkoutGridSkeleton } from '@/components/workout/WorkoutCardSkeleton';
 import { EmptyWorkoutState } from '@/components/workout/EmptyWorkoutState';
 import { MiniExerciseSimulation } from '@/components/workout/ExerciseSimulation';
 import { ExerciseAnimationPlayer } from '@/components/animations/ExerciseAnimationPlayer';
+import { WorkoutAssignmentsTab } from '@/components/workout/WorkoutAssignmentsTab';
+import { useCreateWorkoutAssignment } from '@/hooks/useWorkoutAssignments';
 
 const bodyPartColors: Record<string, string> = {
   'chest': 'hsl(0, 84%, 60%)',
@@ -131,6 +133,7 @@ const AllWorkout = () => {
 
   // Fetch workouts from database
   const { data: dbWorkouts = [], isLoading: isLoadingDb } = useWorkouts();
+  const createWorkoutAssignment = useCreateWorkoutAssignment();
 
   // Map database workouts to frontend format
   const mapDbToFrontend = (db: DbWorkout): Workout => ({
@@ -193,6 +196,9 @@ const AllWorkout = () => {
 
   // Loading state (simulated)
   const [isLoading, setIsLoading] = useState(false);
+
+  // Page-level tab state
+  const [activeTab, setActiveTab] = useState<'workouts' | 'assignments'>('workouts');
 
   // Filter and sort workouts
   const filteredWorkouts = useMemo(() => {
@@ -279,12 +285,32 @@ const AllWorkout = () => {
     setWorkouts((prev) => [...prev, workout]);
   };
 
-  const handleAssignMembers = (workoutId: string, memberIds: string[], options: any) => {
+  const handleAssignMembers = async (workoutId: string, memberIds: string[], options: any) => {
+    // Update local state
     setWorkouts((prev) =>
       prev.map((w) =>
         w.id === workoutId ? { ...w, members: memberIds } : w
       )
     );
+
+    // Save each assignment to the database
+    try {
+      for (const memberId of memberIds) {
+        await createWorkoutAssignment.mutateAsync({
+          workout_id: workoutId,
+          member_id: memberId,
+          start_date: options.startDate,
+          end_date: options.endDate,
+          active_days: options.activeDays,
+          notify: options.notify,
+          notes: options.notes || null,
+          status: 'active',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving workout assignments:', error);
+      toast.error('Failed to save some assignments to database');
+    }
   };
 
   // Bulk action handlers
@@ -452,356 +478,396 @@ const AllWorkout = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="All Workouts"
-        description="Manage workout routines and exercise programs."
-        actions={
-          <Button className="gap-2" onClick={() => setIsCreateDialogOpen(true)}>
+        title="Workout Management"
+        description="Manage workout routines and member assignments."
+      />
+
+      {/* Page-level tabs: Workouts vs Assignments */}
+      <div className="flex items-center gap-4 border-b pb-4">
+        <div className="flex gap-2">
+          <Button
+            variant={activeTab === 'workouts' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('workouts')}
+            className="gap-2"
+          >
+            <Dumbbell className="h-4 w-4" />
+            Workouts
+          </Button>
+          <Button
+            variant={activeTab === 'assignments' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('assignments')}
+            className="gap-2"
+          >
+            <Users className="h-4 w-4" />
+            Assignments
+          </Button>
+        </div>
+        {activeTab === 'workouts' && (
+          <Button className="ml-auto gap-2" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4" />
             Create Workout
           </Button>
-        }
-      />
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Routines"
-          value={workouts.length}
-          icon={Dumbbell}
-          variant="primary"
-        />
-        <StatCard
-          title="Most Used"
-          value={mostUsedWorkout?.name?.split(' ').slice(0, 2).join(' ') || 'N/A'}
-          subtitle={mostUsedWorkout ? `${mostUsedWorkout.usageCount} uses` : 'No data'}
-          icon={Zap}
-          variant="success"
-        />
-        <StatCard
-          title="Avg Duration"
-          value={workouts.length > 0 ? `${Math.round(workouts.reduce((acc, w) => acc + w.duration, 0) / workouts.length)} min` : 'N/A'}
-          icon={Clock}
-        />
-        <Card className="p-4">
-          <p className="text-sm font-medium text-muted-foreground mb-2">Equipment Usage</p>
-          <div className="h-[60px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={equipmentDistribution} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" hide />
-                <Bar dataKey="value" fill="hsl(217, 91%, 60%)" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+        )}
       </div>
 
-      {/* Bulk Actions Bar */}
-      {selectedWorkouts.length > 0 && (
-        <WorkoutBulkActions
-          selectedWorkouts={selectedWorkouts}
-          workouts={workouts}
-          onClearSelection={() => setSelectedWorkouts([])}
-          onSelectAll={handleSelectAll}
-          onBulkAssign={handleBulkAssign}
-          onBulkDuplicate={handleBulkDuplicate}
-          onBulkDelete={handleBulkDelete}
-          totalCount={paginatedWorkouts.length}
+      {activeTab === 'assignments' ? (
+        <WorkoutAssignmentsTab
+          onAssignNew={() => {
+            // Open the assign dialog with the first workout if available
+            // Use mappedWorkouts directly from DB instead of local state
+            if (mappedWorkouts.length > 0) {
+              setAssigningWorkout(mappedWorkouts[0]);
+            } else if (workouts.length > 0) {
+              setAssigningWorkout(workouts[0]);
+            } else {
+              toast.error('No workouts available. Create a workout first.');
+            }
+          }}
         />
-      )}
-
-      {/* Tabs for body parts */}
-      <Tabs value={bodyPartFilter} onValueChange={(v) => { setBodyPartFilter(v); handleFilterChange(); }}>
-        <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
-          <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-          {Object.entries(bodyPartLabels).map(([value, label]) => (
-            <TabsTrigger key={value} value={value} className="text-xs">
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {/* Filters */}
-      <div className="filter-bar">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search workouts..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); handleFilterChange(); }}
-            className="pl-9"
-          />
-        </div>
-
-        <Select value={difficultyFilter} onValueChange={(v) => { setDifficultyFilter(v); handleFilterChange(); }}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Difficulty" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Levels</SelectItem>
-            <SelectItem value="beginner">Beginner</SelectItem>
-            <SelectItem value="intermediate">Intermediate</SelectItem>
-            <SelectItem value="advanced">Advanced</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={equipmentFilter} onValueChange={(v) => { setEquipmentFilter(v); handleFilterChange(); }}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Equipment" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Equipment</SelectItem>
-            <SelectItem value="free-weights">Free Weights</SelectItem>
-            <SelectItem value="machines">Machines</SelectItem>
-            <SelectItem value="bodyweight">Bodyweight</SelectItem>
-            <SelectItem value="mixed">Mixed</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <ArrowUpDown className="h-4 w-4" />
-              Sort
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {SORT_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => setSortBy(option.value)}
-                className={sortBy === option.value ? 'bg-accent' : ''}
-              >
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Filter className="h-4 w-4" />
-              Quick Filter
-              {quickFilter && <Badge variant="secondary" className="ml-1">{quickFilter}</Badge>}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setQuickFilter(null)}>
-              Clear Filter
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {QUICK_FILTERS.map((filter) => (
-              <DropdownMenuItem
-                key={filter.id}
-                onClick={() => setQuickFilter(filter.id)}
-                className={quickFilter === filter.id ? 'bg-accent' : ''}
-              >
-                <filter.icon className="h-4 w-4 mr-2" />
-                {filter.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex items-center gap-1 ml-auto">
-          <Button
-            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => setViewMode('grid')}
-          >
-            <Grid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => setViewMode('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Loading State */}
-      {isLoading ? (
-        <WorkoutGridSkeleton count={itemsPerPage} />
-      ) : paginatedWorkouts.length === 0 ? (
-        workouts.length === 0 ? (
-          <EmptyWorkoutState type="no-workouts" onCreateClick={() => setIsCreateDialogOpen(true)} />
-        ) : (
-          <EmptyWorkoutState type="no-results" onClearFilters={clearAllFilters} />
-        )
       ) : (
         <>
-          {/* Workouts Grid/List */}
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-4'}>
-            {paginatedWorkouts.map((workout) => (
-              <WorkoutCard key={workout.id} workout={workout} />
-            ))}
+          {/* Stats Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Total Routines"
+              value={workouts.length}
+              icon={Dumbbell}
+              variant="primary"
+            />
+            <StatCard
+              title="Most Used"
+              value={mostUsedWorkout?.name?.split(' ').slice(0, 2).join(' ') || 'N/A'}
+              subtitle={mostUsedWorkout ? `${mostUsedWorkout.usageCount} uses` : 'No data'}
+              icon={Zap}
+              variant="success"
+            />
+            <StatCard
+              title="Avg Duration"
+              value={workouts.length > 0 ? `${Math.round(workouts.reduce((acc, w) => acc + w.duration, 0) / workouts.length)} min` : 'N/A'}
+              icon={Clock}
+            />
+            <Card className="p-4">
+              <p className="text-sm font-medium text-muted-foreground mb-2">Equipment Usage</p>
+              <div className="h-[60px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={equipmentDistribution} layout="vertical">
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" hide />
+                    <Bar dataKey="value" fill="hsl(217, 91%, 60%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
           </div>
 
-          {/* Pagination */}
-          <WorkoutPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredWorkouts.length}
-            itemsPerPage={itemsPerPage}
-            onPageChange={setCurrentPage}
-            onItemsPerPageChange={(count) => { setItemsPerPage(count); setCurrentPage(1); }}
+          {/* Bulk Actions Bar */}
+          {selectedWorkouts.length > 0 && (
+            <WorkoutBulkActions
+              selectedWorkouts={selectedWorkouts}
+              workouts={workouts}
+              onClearSelection={() => setSelectedWorkouts([])}
+              onSelectAll={handleSelectAll}
+              onBulkAssign={handleBulkAssign}
+              onBulkDuplicate={handleBulkDuplicate}
+              onBulkDelete={handleBulkDelete}
+              totalCount={paginatedWorkouts.length}
+            />
+          )}
+
+          {/* Tabs for body parts */}
+          <Tabs value={bodyPartFilter} onValueChange={(v) => { setBodyPartFilter(v); handleFilterChange(); }}>
+            <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+              <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+              {Object.entries(bodyPartLabels).map(([value, label]) => (
+                <TabsTrigger key={value} value={value} className="text-xs">
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
+          {/* Filters */}
+          <div className="filter-bar">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search workouts..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); handleFilterChange(); }}
+                className="pl-9"
+              />
+            </div>
+
+            <Select value={difficultyFilter} onValueChange={(v) => { setDifficultyFilter(v); handleFilterChange(); }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Difficulty" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Levels</SelectItem>
+                <SelectItem value="beginner">Beginner</SelectItem>
+                <SelectItem value="intermediate">Intermediate</SelectItem>
+                <SelectItem value="advanced">Advanced</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={equipmentFilter} onValueChange={(v) => { setEquipmentFilter(v); handleFilterChange(); }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Equipment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Equipment</SelectItem>
+                <SelectItem value="free-weights">Free Weights</SelectItem>
+                <SelectItem value="machines">Machines</SelectItem>
+                <SelectItem value="bodyweight">Bodyweight</SelectItem>
+                <SelectItem value="mixed">Mixed</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <ArrowUpDown className="h-4 w-4" />
+                  Sort
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {SORT_OPTIONS.map((option) => (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onClick={() => setSortBy(option.value)}
+                    className={sortBy === option.value ? 'bg-accent' : ''}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  Quick Filter
+                  {quickFilter && <Badge variant="secondary" className="ml-1">{quickFilter}</Badge>}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setQuickFilter(null)}>
+                  Clear Filter
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {QUICK_FILTERS.map((filter) => (
+                  <DropdownMenuItem
+                    key={filter.id}
+                    onClick={() => setQuickFilter(filter.id)}
+                    className={quickFilter === filter.id ? 'bg-accent' : ''}
+                  >
+                    <filter.icon className="h-4 w-4 mr-2" />
+                    {filter.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-1 ml-auto">
+              <Button
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="icon"
+                onClick={() => setViewMode('grid')}
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                size="icon"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Loading State */}
+          {isLoading ? (
+            <WorkoutGridSkeleton count={itemsPerPage} />
+          ) : paginatedWorkouts.length === 0 ? (
+            workouts.length === 0 ? (
+              <EmptyWorkoutState type="no-workouts" onCreateClick={() => setIsCreateDialogOpen(true)} />
+            ) : (
+              <EmptyWorkoutState type="no-results" onClearFilters={clearAllFilters} />
+            )
+          ) : (
+            <>
+              {/* Workouts Grid/List */}
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-4'}>
+                {paginatedWorkouts.map((workout) => (
+                  <WorkoutCard key={workout.id} workout={workout} />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <WorkoutPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredWorkouts.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={(count) => { setItemsPerPage(count); setCurrentPage(1); }}
+              />
+            </>
+          )}
+
+          {/* View Workout Dialog */}
+          <Dialog open={!!viewingWorkout} onOpenChange={() => setViewingWorkout(null)}>
+            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+              {viewingWorkout && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      {viewingWorkout.name}
+                      <Badge style={{ backgroundColor: bodyPartColors[viewingWorkout.bodyPart] }}>
+                        {bodyPartLabels[viewingWorkout.bodyPart]}
+                      </Badge>
+                    </DialogTitle>
+                    <DialogDescription>
+                      Created by {viewingWorkout.trainer} • {viewingWorkout.duration} minutes • {difficultyLabels[viewingWorkout.difficulty]}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-6">
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="p-4 bg-primary/10 rounded-lg text-center">
+                        <p className="text-2xl font-bold text-primary">{viewingWorkout.exercises.length}</p>
+                        <p className="text-xs text-muted-foreground">Exercises</p>
+                      </div>
+                      <div className="p-4 bg-success/10 rounded-lg text-center">
+                        <p className="text-2xl font-bold text-success">{viewingWorkout.duration}</p>
+                        <p className="text-xs text-muted-foreground">Minutes</p>
+                      </div>
+                      <div className="p-4 bg-warning/10 rounded-lg text-center">
+                        <p className="text-2xl font-bold text-warning">{viewingWorkout.usageCount}</p>
+                        <p className="text-xs text-muted-foreground">Uses</p>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg text-center">
+                        <p className="text-2xl font-bold">{viewingWorkout.members.length}</p>
+                        <p className="text-xs text-muted-foreground">Assigned</p>
+                      </div>
+                    </div>
+
+                    {/* Exercises List */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold">Exercises</h4>
+                      {viewingWorkout.exercises.map((exercise, idx) => (
+                        <div key={idx} className="p-4 bg-muted/50 rounded-lg flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-4">
+                            {/* Exercise Animation from Database */}
+                            <ExerciseAnimationPlayer
+                              animationUrl={exercise.animation_url}
+                              className="h-16 w-16"
+                            />
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{exercise.name}</p>
+                              {exercise.notes && (
+                                <p className="text-xs text-muted-foreground">{exercise.notes}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">{exercise.sets} × {exercise.reps}</p>
+                            <p className="text-xs text-muted-foreground">Rest: {exercise.rest}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Assigned Members */}
+                    {viewingWorkout.members.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold mb-2">Assigned Members ({viewingWorkout.members.length})</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {getMemberNames(viewingWorkout.members).map((name, idx) => (
+                            <Badge
+                              key={idx}
+                              variant="secondary"
+                              className="cursor-pointer hover:bg-secondary/80"
+                              onClick={() => handleMemberClick(viewingWorkout.members[idx])}
+                            >
+                              {name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <DialogFooter className="mt-4">
+                    <Button variant="outline" onClick={() => setViewingWorkout(null)}>
+                      Close
+                    </Button>
+                    <Button onClick={() => {
+                      setViewingWorkout(null);
+                      setEditingWorkout(viewingWorkout);
+                    }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Workout
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit/Create Workout Dialog */}
+          <EditWorkoutDialog
+            workout={isCreateDialogOpen ? null : editingWorkout}
+            open={isCreateDialogOpen || !!editingWorkout}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsCreateDialogOpen(false);
+                setEditingWorkout(null);
+              }
+            }}
+            onSave={handleSaveWorkout}
+            onDelete={handleDeleteWorkout}
+            onDuplicate={handleDuplicateWorkout}
           />
+
+          {/* Delete Confirmation Dialog */}
+          <AlertDialog open={!!deletingWorkout} onOpenChange={(open) => !open && setDeletingWorkout(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Workout?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the workout
+                  "{deletingWorkout?.name}"{deletingWorkout?.members.length ? ` and remove it from ${deletingWorkout.members.length} assigned member(s)` : ''}.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deletingWorkout && handleDeleteWorkout(deletingWorkout.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete Workout
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
 
-      {/* View Workout Dialog */}
-      <Dialog open={!!viewingWorkout} onOpenChange={() => setViewingWorkout(null)}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-          {viewingWorkout && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  {viewingWorkout.name}
-                  <Badge style={{ backgroundColor: bodyPartColors[viewingWorkout.bodyPart] }}>
-                    {bodyPartLabels[viewingWorkout.bodyPart]}
-                  </Badge>
-                </DialogTitle>
-                <DialogDescription>
-                  Created by {viewingWorkout.trainer} • {viewingWorkout.duration} minutes • {difficultyLabels[viewingWorkout.difficulty]}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-6">
-                {/* Quick Stats */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 bg-primary/10 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-primary">{viewingWorkout.exercises.length}</p>
-                    <p className="text-xs text-muted-foreground">Exercises</p>
-                  </div>
-                  <div className="p-4 bg-success/10 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-success">{viewingWorkout.duration}</p>
-                    <p className="text-xs text-muted-foreground">Minutes</p>
-                  </div>
-                  <div className="p-4 bg-warning/10 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-warning">{viewingWorkout.usageCount}</p>
-                    <p className="text-xs text-muted-foreground">Uses</p>
-                  </div>
-                  <div className="p-4 bg-muted rounded-lg text-center">
-                    <p className="text-2xl font-bold">{viewingWorkout.members.length}</p>
-                    <p className="text-xs text-muted-foreground">Assigned</p>
-                  </div>
-                </div>
-
-                {/* Exercises List */}
-                <div className="space-y-3">
-                  <h4 className="font-semibold">Exercises</h4>
-                  {viewingWorkout.exercises.map((exercise, idx) => (
-                    <div key={idx} className="p-4 bg-muted/50 rounded-lg flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        {/* Exercise Animation from Database */}
-                        <ExerciseAnimationPlayer
-                          animationUrl={exercise.animation_url}
-                          className="h-16 w-16"
-                        />
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium">{exercise.name}</p>
-                          {exercise.notes && (
-                            <p className="text-xs text-muted-foreground">{exercise.notes}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">{exercise.sets} × {exercise.reps}</p>
-                        <p className="text-xs text-muted-foreground">Rest: {exercise.rest}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Assigned Members */}
-                {viewingWorkout.members.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-2">Assigned Members ({viewingWorkout.members.length})</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {getMemberNames(viewingWorkout.members).map((name, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="secondary"
-                          className="cursor-pointer hover:bg-secondary/80"
-                          onClick={() => handleMemberClick(viewingWorkout.members[idx])}
-                        >
-                          {name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="mt-4">
-                <Button variant="outline" onClick={() => setViewingWorkout(null)}>
-                  Close
-                </Button>
-                <Button onClick={() => {
-                  setViewingWorkout(null);
-                  setEditingWorkout(viewingWorkout);
-                }}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Workout
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit/Create Workout Dialog */}
-      <EditWorkoutDialog
-        workout={isCreateDialogOpen ? null : editingWorkout}
-        open={isCreateDialogOpen || !!editingWorkout}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsCreateDialogOpen(false);
-            setEditingWorkout(null);
-          }
-        }}
-        onSave={handleSaveWorkout}
-        onDelete={handleDeleteWorkout}
-        onDuplicate={handleDuplicateWorkout}
-      />
-
-      {/* Assign Members Dialog */}
+      {/* Assign Members Dialog - Rendered outside tab conditional so it's always available */}
       <AssignMembersDialog
         workout={assigningWorkout}
         open={!!assigningWorkout}
         onOpenChange={(open) => !open && setAssigningWorkout(null)}
         onAssign={handleAssignMembers}
       />
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingWorkout} onOpenChange={(open) => !open && setDeletingWorkout(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Workout?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the workout
-              "{deletingWorkout?.name}"{deletingWorkout?.members.length ? ` and remove it from ${deletingWorkout.members.length} assigned member(s)` : ''}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deletingWorkout && handleDeleteWorkout(deletingWorkout.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete Workout
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

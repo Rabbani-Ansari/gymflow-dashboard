@@ -66,6 +66,7 @@ export const ConvertToMemberDialog = ({ customer, open, onOpenChange }: ConvertT
                 start_date: customer.startDate,
                 expiry_date: expiryDate.toISOString().split('T')[0],
                 payment_due: 0,
+                gym_id: customer.gymId || null, // Pass gym_id from customer
             });
 
             toast.success(`${customer.fullName} has been converted to a member!`);
